@@ -1,18 +1,8 @@
 import express from 'express';
-import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
+import pool from '../config/database.js';
 
 const router = express.Router();
-
-// Database connection
-const createConnection = async () => {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'asistecare'
-  });
-};
 
 // Nodemailer configuration
 const transporter = nodemailer.createTransport({
@@ -28,7 +18,7 @@ const transporter = nodemailer.createTransport({
 // GET /api/reviews - Get approved reviews
 router.get('/', async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const query = `
       SELECT * FROM reviews 
@@ -38,7 +28,7 @@ router.get('/', async (req, res) => {
     `;
 
     const [reviews] = await connection.execute(query);
-    await connection.end();
+    connection.release();
 
     res.json({ reviews });
 
@@ -82,7 +72,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Comment must be less than 1000 characters' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     // Save to database (pending approval)
     const query = `
@@ -91,7 +81,7 @@ router.post('/', async (req, res) => {
     `;
 
     const [result] = await connection.execute(query, [name, email, ratingNum, comment]);
-    await connection.end();
+    connection.release();
 
     // Send notification email to admin
     if (process.env.SMTP_USER && process.env.CONTACT_EMAIL) {
@@ -140,7 +130,7 @@ router.get('/admin', async (req, res) => {
     const offset = (page - 1) * limit;
     const status = req.query.status;
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     let query = 'SELECT * FROM reviews';
     const params = [];
@@ -169,7 +159,7 @@ router.get('/admin', async (req, res) => {
     const [countRows] = await connection.execute(countQuery, countParams);
     const total = countRows[0].total;
 
-    await connection.end();
+    connection.release();
 
     res.json({
       reviews,
@@ -196,7 +186,7 @@ router.put('/:id/approve', async (req, res) => {
       return res.status(400).json({ error: 'Invalid review ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.execute(
       'UPDATE reviews SET approved = 1, updatedAt = NOW() WHERE id = ?',
@@ -204,7 +194,7 @@ router.put('/:id/approve', async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      await connection.end();
+      connection.release();
       return res.status(404).json({ error: 'Review not found' });
     }
 
@@ -214,7 +204,7 @@ router.put('/:id/approve', async (req, res) => {
       [reviewId]
     );
 
-    await connection.end();
+    connection.release();
 
     res.json({
       message: 'Review approved successfully',
@@ -236,14 +226,14 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid review ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.execute(
       'DELETE FROM reviews WHERE id = ?',
       [reviewId]
     );
 
-    await connection.end();
+    connection.release();
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Review not found' });

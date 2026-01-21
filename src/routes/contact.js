@@ -1,18 +1,8 @@
 import express from 'express';
-import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
+import pool from '../config/database.js';
 
 const router = express.Router();
-
-// Database connection
-const createConnection = async () => {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'asistecare'
-  });
-};
 
 // Nodemailer configuration
 const transporter = nodemailer.createTransport({
@@ -50,7 +40,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Postal code must be 5 digits' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     // Save to database
     const query = `
@@ -59,7 +49,7 @@ router.post('/', async (req, res) => {
     `;
 
     const [result] = await connection.execute(query, [name, phone, email, postalCode]);
-    await connection.end();
+    connection.release();
 
     // Send notification email
     if (process.env.SMTP_USER && process.env.CONTACT_EMAIL) {
@@ -104,7 +94,7 @@ router.get('/', async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const query = `
       SELECT * FROM contacts 
@@ -118,7 +108,7 @@ router.get('/', async (req, res) => {
     const [countRows] = await connection.execute('SELECT COUNT(*) as total FROM contacts');
     const total = countRows[0].total;
 
-    await connection.end();
+    connection.release();
 
     res.json({
       contacts,
@@ -145,14 +135,14 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid contact ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.execute(
       'DELETE FROM contacts WHERE id = ?',
       [contactId]
     );
 
-    await connection.end();
+    connection.release();
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Contact not found' });

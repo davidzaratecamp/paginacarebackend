@@ -1,6 +1,6 @@
 import express from 'express';
-import mysql from 'mysql2/promise';
 import jwt from 'jsonwebtoken';
+import pool from '../config/database.js';
 
 const router = express.Router();
 
@@ -22,20 +22,10 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Database connection
-const createConnection = async () => {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'asistecare'
-  });
-};
-
 // GET /api/blog - Get published blog posts
 router.get('/', async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const category = req.query.category;
     const featured = req.query.featured;
@@ -77,7 +67,7 @@ router.get('/', async (req, res) => {
     const [countRows] = await connection.query(countQuery, countParams);
     const total = countRows[0].total;
 
-    await connection.end();
+    connection.release();
 
     res.json({
       posts: rows,
@@ -104,7 +94,7 @@ router.get('/admin/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid post ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const query = `
       SELECT bp.*, a.name as authorName, a.email as authorEmail
@@ -115,7 +105,7 @@ router.get('/admin/:id', authenticateToken, async (req, res) => {
 
     const [rows] = await connection.query(query, [postId]);
 
-    await connection.end();
+    connection.release();
 
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Blog post not found' });
@@ -132,7 +122,7 @@ router.get('/admin/:id', authenticateToken, async (req, res) => {
 // GET /api/blog/:slug - Get a specific blog post by slug
 router.get('/:slug', async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
     const slug = req.params.slug;
 
     const query = `
@@ -145,7 +135,7 @@ router.get('/:slug', async (req, res) => {
     const [rows] = await connection.query(query, [slug]);
 
     if (rows.length === 0) {
-      await connection.end();
+      connection.release();
       return res.status(404).json({ error: 'Blog post not found' });
     }
 
@@ -170,7 +160,7 @@ router.get('/:slug', async (req, res) => {
 
     const [relatedRows] = await connection.query(relatedQuery, [post.category, post.id]);
 
-    await connection.end();
+    connection.release();
 
     res.json({
       post,
@@ -186,7 +176,7 @@ router.get('/:slug', async (req, res) => {
 // GET /api/blog/categories/list - Get all blog categories
 router.get('/categories/list', async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const query = `
       SELECT category, COUNT(*) as count 
@@ -197,7 +187,7 @@ router.get('/categories/list', async (req, res) => {
     `;
 
     const [rows] = await connection.query(query);
-    await connection.end();
+    connection.release();
 
     res.json({ categories: rows });
 
@@ -232,7 +222,7 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     // Check if slug already exists
     const [existingRows] = await connection.query(
@@ -241,7 +231,7 @@ router.post('/', authenticateToken, async (req, res) => {
     );
 
     if (existingRows.length > 0) {
-      await connection.end();
+      connection.release();
       return res.status(400).json({ error: 'El slug ya existe. Elige otro slug único.' });
     }
 
@@ -272,7 +262,7 @@ router.post('/', authenticateToken, async (req, res) => {
       req.user.id
     ]);
 
-    await connection.end();
+    connection.release();
 
     res.status(201).json({
       message: 'Blog post created successfully',
@@ -307,7 +297,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid post ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     // Check if slug exists for different post
     if (slug) {
@@ -317,7 +307,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       );
 
       if (existingRows.length > 0) {
-        await connection.end();
+        connection.release();
         return res.status(400).json({ error: 'El slug ya existe. Elige otro slug único.' });
       }
     }
@@ -390,11 +380,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const [result] = await connection.query(query, updateValues);
 
     if (result.affectedRows === 0) {
-      await connection.end();
+      connection.release();
       return res.status(404).json({ error: 'Blog post not found' });
     }
 
-    await connection.end();
+    connection.release();
 
     res.json({ message: 'Blog post updated successfully' });
 
@@ -413,14 +403,14 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid post ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.query(
       'DELETE FROM blog_posts WHERE id = ?',
       [postId]
     );
 
-    await connection.end();
+    connection.release();
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Blog post not found' });

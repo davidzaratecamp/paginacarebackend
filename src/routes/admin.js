@@ -1,19 +1,9 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import mysql from 'mysql2/promise';
+import pool from '../config/database.js';
 
 const router = express.Router();
-
-// Database connection
-const createConnection = async () => {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'asistecare'
-  });
-};
 
 // JWT middleware for protected routes
 const authenticateToken = (req, res, next) => {
@@ -44,12 +34,12 @@ router.post('/auth', async (req, res) => {
       });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const query = 'SELECT * FROM admins WHERE username = ? AND active = 1';
     const [rows] = await connection.execute(query, [username]);
 
-    await connection.end();
+    connection.release();
 
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -93,7 +83,7 @@ router.post('/auth', async (req, res) => {
 // GET /api/admin/contacts - Get all contacts
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
     
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -116,7 +106,7 @@ router.get('/contacts', authenticateToken, async (req, res) => {
     const [countRows] = await connection.execute('SELECT COUNT(*) as total FROM contacts');
     const total = countRows[0].total;
 
-    await connection.end();
+    connection.release();
 
     res.json({
       contacts: rows,
@@ -143,14 +133,14 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid contact ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
     
     const [result] = await connection.execute(
       'DELETE FROM contacts WHERE id = ?',
       [contactId]
     );
 
-    await connection.end();
+    connection.release();
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Contact not found' });
@@ -167,7 +157,7 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
 // GET /api/admin/reviews - Get all reviews (admin)
 router.get('/reviews', authenticateToken, async (req, res) => {
   try {
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
     
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -206,7 +196,7 @@ router.get('/reviews', authenticateToken, async (req, res) => {
     const [countRows] = await connection.execute(countQuery, countParams);
     const total = countRows[0].total;
 
-    await connection.end();
+    connection.release();
 
     res.json({
       reviews: rows,
@@ -233,7 +223,7 @@ router.put('/reviews/:id/approve', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid review ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.execute(
       'UPDATE reviews SET approved = 1, updatedAt = NOW() WHERE id = ?',
@@ -241,7 +231,7 @@ router.put('/reviews/:id/approve', authenticateToken, async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      await connection.end();
+      connection.release();
       return res.status(404).json({ error: 'Review not found' });
     }
 
@@ -251,7 +241,7 @@ router.put('/reviews/:id/approve', authenticateToken, async (req, res) => {
       [reviewId]
     );
 
-    await connection.end();
+    connection.release();
 
     res.json({
       message: 'Review approved successfully',
@@ -273,14 +263,14 @@ router.delete('/reviews/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid review ID' });
     }
 
-    const connection = await createConnection();
+    const connection = await pool.getConnection();
 
     const [result] = await connection.execute(
       'DELETE FROM reviews WHERE id = ?',
       [reviewId]
     );
 
-    await connection.end();
+    connection.release();
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Review not found' });

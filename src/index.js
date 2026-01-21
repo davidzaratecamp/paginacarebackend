@@ -1,14 +1,14 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 
-// Routes
+// Routes (importar después de dotenv.config para que el pool tenga las variables de entorno)
 import contactRoutes from './routes/contact.js';
 import reviewRoutes from './routes/reviews.js';
 import blogRoutes from './routes/blog.js';
 import adminRoutes from './routes/admin.js';
-
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5001;

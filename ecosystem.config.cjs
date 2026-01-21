@@ -2,7 +2,9 @@ module.exports = {
   apps: [{
     name: 'asiste-healthcare-backend',
     script: './src/index.js',
+    cwd: '/var/www/asiste-healthcare-backend',
     node_args: '-r dotenv/config',
+    exec_mode: 'fork',
     instances: 1,
     autorestart: true,
     watch: false,
